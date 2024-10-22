@@ -19,6 +19,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { WishlistModule } from '@wishlist/wishlist.module';
 import { AddressModule } from '@address/address.module';
 import { OrderModule } from '@order/order.module';
+import { ThrottlerModule } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -42,6 +43,12 @@ import { OrderModule } from '@order/order.module';
       }),
       inject: [ConfigService],
     }),
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 10,
+      },
+    ]),
     HealthModule,
     UserModule,
     AddressModule,
