@@ -14,7 +14,6 @@ import { CreateTokenDto } from '@token/dto/create-token.dto';
 import { IAuthService } from '@auth/interfaces/auth.service.interface';
 import { RegisterCredentialsDto } from '@auth/dto/register-credentials.dto';
 import { HashingService } from './hashing.service';
-import { RateLimitService } from '@common/services/rate-limit.service';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -24,14 +23,12 @@ export class AuthService implements IAuthService {
     private readonly userService: UserService,
     private readonly tokenService: TokenService,
     private readonly hashingService: HashingService,
-    private readonly rateLimitService: RateLimitService,
   ) {}
 
   public async login(
     credentials: LoginCredentialsDto,
   ): Promise<AuthResponseDto> {
     this.logger.log(`Attempting login for email: ${credentials.email}`);
-    await this.rateLimitService.checkRateLimit(credentials.email);
 
     try {
       const user = await this.validateUser(credentials);
