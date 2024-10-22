@@ -6,10 +6,12 @@ import { AuthController } from './controllers/auth.controller';
 import { AuthService } from './services/auth.service';
 import { GoogleAuthService } from './services/google.auth.service';
 import { HttpModule } from '@nestjs/axios';
+import { HashingService } from './services/hashing.service';
+import { RateLimitService } from '@common/services/rate-limit.service';
 
 @Module({
   imports: [forwardRef(() => UserModule), TokenModule, HttpModule],
   controllers: [AuthController, GoogleAuthController],
-  providers: [AuthService, GoogleAuthService],
+  providers: [AuthService, GoogleAuthService, HashingService, RateLimitService],
 })
 export class AuthModule {}
