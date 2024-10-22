@@ -9,7 +9,10 @@ async function bootstrap() {
     logger: loggerOptions,
     rawBody: true,
   });
+
+  app.set('trust proxy', 'loopback');
   setupMiddlewares(app);
+
   await app.listen(process.env.PORT);
 }
 
