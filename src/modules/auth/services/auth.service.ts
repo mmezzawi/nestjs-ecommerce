@@ -6,7 +6,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
-import argon2 from 'argon2';
 import { TokenService } from '@token/services/token.service';
 import { UserService } from '@user/services/user.service';
 import { LoginCredentialsDto } from '@auth/dto/login-credentials.dto';
@@ -14,6 +13,8 @@ import { AuthResponseDto } from '@auth/dto/auth-response.dto';
 import { CreateTokenDto } from '@token/dto/create-token.dto';
 import { IAuthService } from '@auth/interfaces/auth.service.interface';
 import { RegisterCredentialsDto } from '@auth/dto/register-credentials.dto';
+import { HashingService } from './hashing.service';
+import { RateLimitService } from '@common/services/rate-limit.service';
 
 @Injectable()
 export class AuthService implements IAuthService {
@@ -22,12 +23,16 @@ export class AuthService implements IAuthService {
   public constructor(
     private readonly userService: UserService,
     private readonly tokenService: TokenService,
+    private readonly hashingService: HashingService,
+    private readonly rateLimitService: RateLimitService,
   ) {}
 
   public async login(
     credentials: LoginCredentialsDto,
   ): Promise<AuthResponseDto> {
     this.logger.log(`Attempting login for email: ${credentials.email}`);
+    await this.rateLimitService.checkRateLimit(credentials.email);
+
     try {
       const user = await this.validateUser(credentials);
       const response = await this.generateAuthResponse(user);
@@ -57,7 +62,10 @@ export class AuthService implements IAuthService {
         throw new ConflictException('User already exists');
       }
 
-      const hashedPassword = await argon2.hash(credentials.password);
+      const hashedPassword = await this.hashingService.hashPassword(
+        credentials.password,
+      );
+
       const user = await this.userService.createUser({
         ...credentials,
         password: hashedPassword,
@@ -100,6 +108,7 @@ export class AuthService implements IAuthService {
 
   public async logout(refreshToken: string): Promise<void> {
     this.logger.log(`Attempting logout`);
+
     try {
       await this.tokenService.revokeRefreshToken(refreshToken);
       this.logger.log(`Logout successful`);
@@ -113,12 +122,14 @@ export class AuthService implements IAuthService {
     tokenPayload: CreateTokenDto,
   ): Promise<AuthResponseDto> {
     this.logger.log(`Generating authentication response`);
+
     const [accessToken, refreshToken] = await Promise.all([
       this.tokenService.generateAccessToken(tokenPayload),
       this.tokenService.generateRefreshToken(tokenPayload),
     ]);
 
     this.logger.log(`Authentication response generated`);
+
     return {
       accessToken: accessToken,
       refreshToken: refreshToken,
@@ -131,6 +142,7 @@ export class AuthService implements IAuthService {
   ): Promise<CreateTokenDto> {
     this.logger.log(`Validating user for email: ${credentials.email}`);
     const user = await this.userService.getUserByEmail(credentials.email);
+
     if (!user) {
       this.logger.warn(
         `Validation failed: User not found for email: ${credentials.email}`,
@@ -138,10 +150,11 @@ export class AuthService implements IAuthService {
       throw new NotFoundException('User not found');
     }
 
-    const isPasswordValid = await argon2.verify(
+    const isPasswordValid = await this.hashingService.verifyPassword(
       user.password,
       credentials.password,
     );
+
     if (!isPasswordValid) {
       this.logger.warn(
         `Validation failed: Invalid password for email: ${credentials.email}`,

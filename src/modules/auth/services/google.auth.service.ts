@@ -10,7 +10,6 @@ import { stringify } from 'qs';
 import { plainToInstance } from 'class-transformer';
 import { AxiosResponse } from 'axios';
 import { firstValueFrom, map } from 'rxjs';
-import argon2 from 'argon2';
 import { TokenService } from '@token/services/token.service';
 import { UserService } from '@user/services/user.service';
 import { CreateUserDto } from '@user/dto/create-user.dto';
@@ -18,6 +17,8 @@ import { AuthResponseDto } from '@auth/dto/auth-response.dto';
 import { CreateTokenDto } from '@token/dto/create-token.dto';
 import { GoogleToken } from '@auth/interfaces/google-token.interface';
 import { GoogleUser } from '@auth/interfaces/google-user.interface';
+import { RateLimitService } from '@common/services/rate-limit.service';
+import { HashingService } from './hashing.service';
 
 @Injectable()
 export class GoogleAuthService {
@@ -35,6 +36,8 @@ export class GoogleAuthService {
     private readonly tokenService: TokenService,
     private readonly httpService: HttpService,
     private readonly configService: ConfigService,
+    private readonly hashingService: HashingService,
+    private readonly rateLimitService: RateLimitService,
   ) {
     this.googleClientId = this.configService.get<string>('GOOGLE_CLIENT_ID');
     this.googleClientSecret = this.configService.get<string>(
@@ -93,6 +96,9 @@ export class GoogleAuthService {
 
   private async fetchGoogleOAuthTokens(code: string): Promise<GoogleToken> {
     this.logger.log(`Fetching Google OAuth Tokens with code: ${code}`);
+
+    await this.rateLimitService.checkRateLimit(code);
+
     const response = await firstValueFrom(
       this.httpService
         .post<GoogleToken>(
@@ -116,6 +122,8 @@ export class GoogleAuthService {
     access_token: string,
   ): Promise<GoogleUser> {
     this.logger.log(`Fetching Google user info`);
+    await this.rateLimitService.checkRateLimit(id_token);
+
     const response = await this.getGoogleUserResponse(id_token, access_token);
 
     if (!response) {
@@ -179,7 +187,8 @@ export class GoogleAuthService {
       `Creating user DTO for Google user with email: ${googleUser.email}`,
     );
     const password = await this.generateRandomPassword();
-    const hashedPassword = await argon2.hash(password);
+
+    const hashedPassword = await this.hashingService.hashPassword(password);
 
     return {
       role,
